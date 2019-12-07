@@ -1,15 +1,13 @@
-import { getLocationForJsonPath as getLocationForJsonPathJson, JsonParserResult, safeStringify } from '@stoplight/json';
+import { safeStringify } from '@stoplight/json';
 import { Resolver } from '@stoplight/json-ref-resolver';
-import { ICache, IUriParser } from '@stoplight/json-ref-resolver/types';
-import { extname, normalize } from '@stoplight/path';
-import { Dictionary, IDiagnostic, Optional } from '@stoplight/types';
-import { getLocationForJsonPath as getLocationForJsonPathYaml, YamlParserResult } from '@stoplight/yaml';
+import { Dictionary } from '@stoplight/types';
 import { merge } from 'lodash';
 
 import { STATIC_ASSETS } from './assets';
-import { formatParserDiagnostics, formatResolverErrors } from './error-messages';
+import { IDocument, isDocument } from './document';
+import { Document } from './document';
 import { functions as defaultFunctions } from './functions';
-import { parseJson, parseYaml } from './parsers';
+import * as Parsers from './parsers';
 import { Resolved } from './resolved';
 import { readRuleset } from './rulesets';
 import { compileExportedFunction } from './rulesets/evaluators';
@@ -20,7 +18,6 @@ import {
   FormatLookup,
   FunctionCollection,
   IConstructorOpts,
-  IParsedResult,
   IResolver,
   IRuleResult,
   IRunOpts,
@@ -37,26 +34,14 @@ export * from './types';
 
 export class Spectral {
   private readonly _resolver: IResolver;
-  private readonly _parsedRefs: Dictionary<IParsedResult>;
-  private static readonly _parsedCache = new WeakMap<ICache | IResolver, Dictionary<IParsedResult>>();
+
   public functions: FunctionCollection = { ...defaultFunctions };
   public rules: RunRuleCollection = {};
-
   public formats: RegisteredFormats;
 
   constructor(opts?: IConstructorOpts) {
-    this._resolver = opts && opts.resolver ? opts.resolver : new Resolver();
+    this._resolver = opts?.resolver || new Resolver();
     this.formats = {};
-
-    const cacheKey = this._resolver instanceof Resolver ? this._resolver.uriCache : this._resolver;
-    const _parsedRefs = Spectral._parsedCache.get(cacheKey);
-    if (_parsedRefs) {
-      this._parsedRefs = _parsedRefs;
-    } else {
-      this._parsedRefs = {};
-
-      Spectral._parsedCache.set(cacheKey, this._parsedRefs);
-    }
   }
 
   public static registerStaticAssets(assets: Dictionary<string, string>) {
@@ -64,47 +49,27 @@ export class Spectral {
     Object.assign(STATIC_ASSETS, assets);
   }
 
-  public async runWithResolved(
-    target: IParsedResult | object | string,
-    opts: IRunOpts = {},
-  ): Promise<ISpectralFullResult> {
-    let results: IRuleResult[] = [];
+  public async runWithResolved(target: IDocument | object | string, opts: IRunOpts = {}): Promise<ISpectralFullResult> {
+    const document: IDocument = isDocument(target)
+      ? target // todo: opts.resolveOpts.documentUri?
+      : new Document(
+          typeof target === 'string' ? target : safeStringify(target, undefined, 2),
+          Parsers.Yaml,
+          opts.resolve?.documentUri,
+        );
 
-    let parsedResult: IParsedResult | IParsedResult<YamlParserResult<unknown>>;
-    if (!isParsedResult(target)) {
-      parsedResult = {
-        parsed: parseYaml(typeof target === 'string' ? target : safeStringify(target, undefined, 2)),
-        getLocationForJsonPath: getLocationForJsonPathYaml,
-        // we need to normalize the path in case path with forward slashes is given
-        source: opts.resolve?.documentUri && normalize(opts.resolve.documentUri),
-      };
-    } else {
-      parsedResult = target;
-    }
+    const resolved = new Resolved(document, this._resolver);
+    await resolved.resolve();
 
-    results = results.concat(formatParserDiagnostics(parsedResult.parsed.diagnostics, parsedResult.source));
-
-    const documentUri = opts.resolve && opts.resolve.documentUri;
-    const refDiagnostics: IRuleResult[] = [];
-
-    const resolved = new Resolved(
-      parsedResult,
-      await this._resolver.resolve(parsedResult.parsed.data, {
-        baseUri: documentUri,
-        parseResolveResult: this._parseResolveResult(refDiagnostics),
-      }),
-      this._parsedRefs,
-    );
-
-    if (resolved.formats === void 0) {
+    if (document.formats === void 0) {
       const foundFormats = Object.keys(this.formats).filter(format => this.formats[format](resolved.resolved));
-      resolved.formats = foundFormats.length === 0 ? null : foundFormats;
+      document.formats = foundFormats.length === 0 ? null : foundFormats;
     }
 
-    const validationResults = [
-      ...refDiagnostics,
-      ...results,
-      ...formatResolverErrors(resolved),
+    const validationResults: IRuleResult[] = [
+      ...resolved.diagnostics,
+      ...document.diagnostics,
+      ...resolved.errors,
       ...runRules(resolved, this.rules, this.functions),
     ];
 
@@ -114,7 +79,7 @@ export class Spectral {
     };
   }
 
-  public async run(target: IParsedResult | object | string, opts: IRunOpts = {}): Promise<IRuleResult[]> {
+  public async run(target: IDocument | object | string, opts: IRunOpts = {}): Promise<IRuleResult[]> {
     return (await this.runWithResolved(target, opts)).results;
   }
 
@@ -183,44 +148,4 @@ export class Spectral {
   public registerFormat(format: string, fn: FormatLookup) {
     this.formats[format] = fn;
   }
-
-  private _parseResolveResult = (refDiagnostics: IDiagnostic[]) => async (resolveOpts: IUriParser) => {
-    const ref = resolveOpts.targetAuthority.href().replace(/\/$/, '');
-    const ext = extname(ref);
-
-    const content = String(resolveOpts.result);
-    let parsedRefResult: Optional<IParsedResult<YamlParserResult<unknown>> | IParsedResult<JsonParserResult<unknown>>>;
-    if (ext === '.yml' || ext === '.yaml') {
-      parsedRefResult = {
-        parsed: parseYaml(content),
-        source: ref,
-        getLocationForJsonPath: getLocationForJsonPathYaml,
-      };
-    } else if (ext === '.json') {
-      parsedRefResult = {
-        parsed: parseJson(content),
-        source: ref,
-        getLocationForJsonPath: getLocationForJsonPathJson,
-      };
-    }
-
-    if (parsedRefResult !== void 0) {
-      resolveOpts.result = parsedRefResult.parsed.data;
-      if (parsedRefResult.parsed.diagnostics.length > 0) {
-        refDiagnostics.push(...formatParserDiagnostics(parsedRefResult.parsed.diagnostics, parsedRefResult.source));
-      }
-
-      this._parsedRefs[ref] = parsedRefResult;
-    }
-
-    return resolveOpts;
-  };
 }
-
-export const isParsedResult = (obj: any): obj is IParsedResult => {
-  if (!obj || typeof obj !== 'object') return false;
-  if (!obj.parsed || typeof obj.parsed !== 'object') return false;
-  if (!obj.getLocationForJsonPath || typeof obj.getLocationForJsonPath !== 'function') return false;
-
-  return true;
-};

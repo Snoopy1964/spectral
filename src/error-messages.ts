@@ -1,7 +1,8 @@
+import { IResolveError } from '@stoplight/json-ref-resolver/types';
 import { DiagnosticSeverity, IDiagnostic, Segment } from '@stoplight/types';
 import { JsonPath } from '@stoplight/types/dist';
 import { uniqBy } from 'lodash';
-import { Resolved } from './resolved';
+import { IDocument } from './document';
 import { IRuleResult } from './types';
 
 const toUpperCase = (word: string) => word.toUpperCase();
@@ -41,10 +42,10 @@ export function formatParserDiagnostics(diagnostics: IDiagnostic[], source?: str
   }));
 }
 
-export const formatResolverErrors = (resolved: Resolved): IRuleResult[] => {
-  return uniqBy(resolved.errors, 'message').reduce<IRuleResult[]>((errors, error) => {
-    const path = [...error.path, '$ref'];
-    const location = resolved.getLocationForJsonPath(path);
+export const formatResolverErrors = (document: IDocument, diagnostics: IResolveError[]): IRuleResult[] => {
+  return uniqBy(diagnostics, 'message').reduce<IRuleResult[]>((errors, error) => {
+    const path = [...(error.path || []), '$ref'];
+    const location = document.getLocationForJsonPath(document.parsed, path, true);
 
     if (location) {
       errors.push({
@@ -53,7 +54,7 @@ export const formatResolverErrors = (resolved: Resolved): IRuleResult[] => {
         message: prettyPrintResolverErrorMessage(error.message),
         severity: DiagnosticSeverity.Error,
         range: location.range,
-        source: resolved.source,
+        source: document.source,
       });
     }
 

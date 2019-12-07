@@ -2,7 +2,7 @@ import { hasRef } from '@stoplight/json';
 import { JsonPath } from '@stoplight/types';
 import { IFunction, IFunctionResult } from '../../../types';
 
-// function is needed because `$..$ref` or `$..[?(@.$ref)]` are not parsed correctly
+// function is needed because `$..$ref` or `$..[?(@.$ref)]` are not document correctly
 // and therefore lead to infinite recursion due to the dollar sign ('$' in '$ref')
 function* siblingIterator(obj: object, path: JsonPath): IterableIterator<JsonPath> {
   for (const key in obj) {

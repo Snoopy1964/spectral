@@ -1,49 +1,64 @@
 import { extractSourceFromRef, hasRef, isLocalRef, pointerToPath } from '@stoplight/json';
-import { IGraphNodeData, IResolveError } from '@stoplight/json-ref-resolver/types';
-import { normalize, resolve } from '@stoplight/path';
-import { Dictionary, ILocation, IRange, JsonPath } from '@stoplight/types';
+import { Resolver } from '@stoplight/json-ref-resolver';
+import { ICache, IGraphNodeData, IUriParser } from '@stoplight/json-ref-resolver/types';
+import { extname, resolve } from '@stoplight/path';
+import { Dictionary, JsonPath } from '@stoplight/types';
+import { IParserResult } from '@stoplight/types/dist';
 import { DepGraph } from 'dependency-graph';
 import { get } from 'lodash';
-import { IParsedResult, ResolveResult } from './types';
+import { Document, IDocument } from './document';
+import { formatParserDiagnostics, formatResolverErrors } from './error-messages';
+import * as Parsers from './parsers';
+import { IParser } from './parsers/types';
+import { IResolver, IRuleResult } from './types';
 import { getEndRef, isAbsoluteRef, safePointerToPath, traverseObjUntilRef } from './utils';
 
-const getDefaultRange = (): IRange => ({
-  start: {
-    line: 0,
-    character: 0,
-  },
-  end: {
-    line: 0,
-    character: 0,
-  },
-});
-
+// todo: rename to resolving service and move parseResolveResult
 export class Resolved {
-  public readonly refMap: Dictionary<string>;
-  public readonly graph: DepGraph<IGraphNodeData>;
-  public readonly resolved: unknown;
-  public readonly unresolved: unknown;
-  public readonly errors: IResolveError[];
-  public formats?: string[] | null;
+  private static readonly _cachedRemoteDocuments = new WeakMap<ICache | IResolver, Dictionary<Document>>();
+
+  public graph!: DepGraph<IGraphNodeData>;
+  public resolved: unknown;
+  public errors!: IRuleResult[];
+  public diagnostics: IRuleResult[] = [];
+
+  public readonly referencedDocuments: Dictionary<Document>;
 
   public get source() {
-    return this.parsed.source ? normalize(this.parsed.source) : this.parsed.source;
+    return this.document.source;
   }
 
-  constructor(
-    public readonly parsed: IParsedResult,
-    resolveResult: ResolveResult,
-    public parsedRefs: Dictionary<IParsedResult>,
-  ) {
-    this.unresolved = parsed.parsed.data;
-    this.formats = parsed.formats;
+  public get unresolved() {
+    return this.document.data;
+  }
 
-    this.refMap = resolveResult.refMap;
+  public get formats() {
+    return this.document.formats;
+  }
+
+  constructor(public readonly document: IDocument, protected resolver: IResolver) {
+    const cacheKey = resolver instanceof Resolver ? resolver.uriCache : resolver;
+    const cachedDocuments = Resolved._cachedRemoteDocuments.get(cacheKey);
+    if (cachedDocuments) {
+      this.referencedDocuments = cachedDocuments;
+    } else {
+      this.referencedDocuments = {};
+      Resolved._cachedRemoteDocuments.set(cacheKey, this.referencedDocuments);
+    }
+  }
+
+  public async resolve() {
+    const resolveResult = await this.resolver.resolve(this.document.data, {
+      baseUri: this.document.source,
+      parseResolveResult: this.parseResolveResult,
+    });
+
     this.graph = resolveResult.graph;
     this.resolved = resolveResult.result;
-    this.errors = resolveResult.errors;
+    this.errors = formatResolverErrors(this.document, resolveResult.errors);
   }
 
+  // todo: rename, findAssociatedDocForPath? return { document: IDocument, path: jsonPath } | null
   public getParsedForJsonPath(path: JsonPath) {
     try {
       const newPath: JsonPath = [...path];
@@ -52,7 +67,7 @@ export class Resolved {
       if ($ref === null) {
         return {
           path,
-          doc: this.parsed,
+          doc: this.document,
         };
       }
 
@@ -68,18 +83,17 @@ export class Resolved {
         if (isLocalRef($ref)) {
           return {
             path: pointerToPath($ref),
-            doc: source === this.parsed.source ? this.parsed : this.parsedRefs[source],
+            doc: source === this.document.source ? this.document : this.referencedDocuments[source],
           };
         }
 
         const extractedSource = extractSourceFromRef($ref)!;
         source = isAbsoluteRef(extractedSource) ? extractedSource : resolve(source, '..', extractedSource);
 
-        const doc = source === this.parsed.source ? this.parsed : this.parsedRefs[source];
-        const { parsed } = doc;
+        const doc = source === this.document.source ? this.document : this.referencedDocuments[source];
         const scopedPath = [...safePointerToPath($ref), ...newPath];
 
-        const obj = scopedPath.length === 0 || hasRef(parsed.data) ? parsed.data : get(parsed.data, scopedPath);
+        const obj = scopedPath.length === 0 || hasRef(doc.data) ? doc.data : get(doc.data, scopedPath);
 
         if (hasRef(obj)) {
           $ref = obj.$ref;
@@ -95,24 +109,21 @@ export class Resolved {
     }
   }
 
-  public getLocationForJsonPath(path: JsonPath, closest?: boolean): ILocation {
-    const parsedResult = this.getParsedForJsonPath(path);
-    if (parsedResult === null) {
-      return {
-        range: getDefaultRange(),
-      };
+  protected parseResolveResult = async (resolveOpts: IUriParser) => {
+    const source = resolveOpts.targetAuthority.href().replace(/\/$/, '');
+    const ext = extname(source);
+
+    const content = String(resolveOpts.result);
+    const parser: IParser<IParserResult<unknown, any, any, any>> = ext === '.json' ? Parsers.Json : Parsers.Yaml;
+    const document = new Document(content, parser, source);
+
+    resolveOpts.result = parser.parse(content).data; // document.data;
+    if (document.diagnostics.length > 0) {
+      this.diagnostics.push(...formatParserDiagnostics(document.diagnostics, document.source));
     }
 
-    const location = parsedResult.doc.getLocationForJsonPath(parsedResult.doc.parsed, parsedResult.path, closest);
+    this.referencedDocuments[source] = document;
 
-    return {
-      ...(parsedResult.doc.source && { uri: parsedResult.doc.source }),
-      range: location?.range || getDefaultRange(),
-    };
-  }
-
-  public getValueForJsonPath(path: JsonPath): unknown {
-    const parsedResult = this.getParsedForJsonPath(path);
-    return parsedResult === null ? void 0 : get(parsedResult.doc.parsed.data, parsedResult.path);
-  }
+    return resolveOpts;
+  };
 }

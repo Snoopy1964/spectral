@@ -2,7 +2,8 @@ import { getLocationForJsonPath, parseWithPointers } from '@stoplight/json';
 import { IGraphNodeData } from '@stoplight/json-ref-resolver/types';
 import { DiagnosticSeverity, Dictionary } from '@stoplight/types';
 import { DepGraph } from 'dependency-graph';
-import { isParsedResult, Spectral } from '../spectral';
+import { isDocument } from '../document';
+import { Spectral } from '../spectral';
 import { IParsedResult, IResolver, IRunRule, RuleFunction } from '../types';
 
 const merge = require('lodash/merge');
@@ -264,27 +265,27 @@ describe('spectral', () => {
     });
   });
 
-  test('isParsedResult correctly identifies objects that fulfill the IParsedResult interface', () => {
+  test('isDocument correctly identifies objects that fulfill the IParsedResult interface', () => {
     // @ts-ignore
-    expect(isParsedResult()).toBe(false);
+    expect(isDocument()).toBe(false);
 
-    expect(isParsedResult('')).toBe(false);
-    expect(isParsedResult([])).toBe(false);
-    expect(isParsedResult({})).toBe(false);
+    expect(isDocument('')).toBe(false);
+    expect(isDocument([])).toBe(false);
+    expect(isDocument({})).toBe(false);
     expect(
-      isParsedResult({
+      isDocument({
         parsed: undefined,
       }),
     ).toBe(false);
 
     expect(
-      isParsedResult({
+      isDocument({
         parsed: [],
       }),
     ).toBe(false);
 
     expect(
-      isParsedResult({
+      isDocument({
         parsed: {
           data: {},
         },
@@ -300,6 +301,6 @@ describe('spectral', () => {
         diagnostics: [],
       },
     };
-    expect(isParsedResult(obj)).toBe(true);
+    expect(isDocument(obj)).toBe(true);
   });
 });

@@ -92,7 +92,7 @@ export const lintNode = (
       ...targetResults.map<IRuleResult>(result => {
         const escapedJsonPath = (result.path || targetPath).map(segment => decodePointerFragment(String(segment)));
         const parsed = resolved.getParsedForJsonPath(
-          // todo: scope path there in parsed for jsonpath
+          // todo: scope path there in document for jsonpath
           getClosestJsonPath(rule.resolved === false ? resolved.unresolved : resolved.resolved, escapedJsonPath),
         );
 
@@ -121,7 +121,7 @@ export const lintNode = (
                   description: rule.description,
                   get value() {
                     // let's make `value` lazy
-                    const value = get(parsed?.doc.parsed.data, path);
+                    const value = get(parsed?.doc.data, path);
                     if (isObject(value)) {
                       return Array.isArray(value) ? 'Array[]' : 'Object{}';
                     }
@@ -141,7 +141,6 @@ export const lintNode = (
   return results;
 };
 
-// todo: revisit -> https://github.com/stoplightio/spectral/issues/608
 function getClosestJsonPath(data: unknown, path: JsonPath) {
   if (!isObject(data)) return [];
 
