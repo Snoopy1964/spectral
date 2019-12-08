@@ -110,14 +110,14 @@ export class Resolved {
   }
 
   protected parseResolveResult = async (resolveOpts: IUriParser) => {
-    const source = resolveOpts.targetAuthority.href().replace(/\/$/, '');
+    const source = resolveOpts.targetAuthority.toString().replace(/\/$/, '');
     const ext = extname(source);
 
     const content = String(resolveOpts.result);
     const parser: IParser<IParserResult<unknown, any, any, any>> = ext === '.json' ? Parsers.Json : Parsers.Yaml;
     const document = new Document(content, parser, source);
 
-    resolveOpts.result = parser.parse(content).data; // document.data;
+    resolveOpts.result = document.data;
     if (document.diagnostics.length > 0) {
       this.diagnostics.push(...formatParserDiagnostics(document.diagnostics, document.source));
     }

@@ -1,8 +1,9 @@
-import { getLocationForJsonPath, parseWithPointers } from '@stoplight/json';
 import { Resolver } from '@stoplight/json-ref-resolver';
 import { DiagnosticSeverity } from '@stoplight/types';
 import { parse } from '@stoplight/yaml';
+import { Document } from '../document';
 import { isOpenApiv2, isOpenApiv3 } from '../formats';
+import * as Parsers from '../parsers';
 import { mergeRules, readRuleset } from '../rulesets';
 import { RuleCollection, Spectral } from '../spectral';
 
@@ -632,10 +633,7 @@ responses:: !!foo
 
   describe('reports duplicated properties for', () => {
     test('JSON format', async () => {
-      const result = await spectral.run({
-        parsed: parseWithPointers('{"foo":true,"foo":false}', { ignoreDuplicateKeys: false }),
-        getLocationForJsonPath,
-      });
+      const result = await spectral.run(new Document('{"foo":true,"foo":false}', Parsers.Json));
 
       expect(result).toEqual([
         {

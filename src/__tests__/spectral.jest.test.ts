@@ -1,9 +1,10 @@
-import { getLocationForJsonPath, parseWithPointers } from '@stoplight/json';
 import { DiagnosticSeverity, Dictionary } from '@stoplight/types';
 import * as fs from 'fs';
 import * as nock from 'nock';
 import * as path from 'path';
+import { Document } from '../document';
 import { isOpenApiv2 } from '../formats';
+import * as Parsers from '../parsers';
 import { httpAndFileResolver } from '../resolvers/http-and-file';
 import { IRunRule, Spectral } from '../spectral';
 
@@ -102,17 +103,9 @@ describe('Spectral', () => {
     const spectral = new Spectral({ resolver: httpAndFileResolver });
     await spectral.loadRuleset('spectral:oas');
     spectral.registerFormat('oas2', isOpenApiv2);
-    const parsed = {
-      parsed: parseWithPointers(fs.readFileSync(documentUri, 'utf8')),
-      getLocationForJsonPath,
-      source: documentUri,
-    };
+    const document = new Document(fs.readFileSync(documentUri, 'utf8'), Parsers.Json, documentUri);
 
-    const results = await spectral.run(parsed, {
-      resolve: {
-        documentUri,
-      },
-    });
+    const results = await spectral.run(document);
 
     expect(results).toEqual(
       expect.arrayContaining([

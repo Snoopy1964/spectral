@@ -8,6 +8,8 @@ import { IRuleResult } from './types';
 import { isObjectLiteral } from './utils/isObjectLiteral';
 
 export const isDocument = (obj: unknown): obj is IDocument => {
+  if (obj instanceof Document) return true;
+
   if (!isObject(obj)) return false;
   if (
     !('getRangeForJsonPath' in obj) ||
@@ -16,8 +18,13 @@ export const isDocument = (obj: unknown): obj is IDocument => {
     return false;
   }
 
-  if (!('parserResult' in obj) || !isObjectLiteral(obj as Partial<{ parserResult: unknown }>)) return false;
-  if (!('diagnostics' in obj) || !Array.isArray(obj as Partial<{ diagnostics: IDiagnostic[] }>)) return false;
+  if (!('parserResult' in obj) || !isObjectLiteral((obj as Partial<{ parserResult: unknown }>).parserResult)) {
+    return false;
+  }
+
+  if (!('diagnostics' in obj) || !Array.isArray((obj as Partial<{ diagnostics: IDiagnostic[] }>).diagnostics)) {
+    return false;
+  }
 
   return true;
 };
@@ -38,7 +45,7 @@ export class Document<D = unknown, R extends IParserResult = IParserResult<D>> i
   constructor(protected readonly input: string, protected readonly parser: IParser<R>, source?: string) {
     this.parserResult = parser.parse(input);
     // we need to normalize the path in case path with forward slashes is given
-    this.source = source && normalize(source);
+    this.source = source && (/^[a-z]+:\/\/./i.test(source) ? source : normalize(source));
   }
 
   public getRangeForJsonPath(path: JsonPath, closest?: boolean): Optional<IRange> {

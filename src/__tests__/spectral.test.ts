@@ -1,10 +1,11 @@
-import { getLocationForJsonPath, parseWithPointers } from '@stoplight/json';
 import { IGraphNodeData } from '@stoplight/json-ref-resolver/types';
 import { DiagnosticSeverity, Dictionary } from '@stoplight/types';
 import { DepGraph } from 'dependency-graph';
 import { IDocument, isDocument } from '../document';
+import { Document } from '../document';
+import * as Parsers from '../parsers';
 import { Spectral } from '../spectral';
-import { IParsedResult, IResolver, IRunRule, RuleFunction } from '../types';
+import { IResolver, IRunRule, RuleFunction } from '../types';
 
 const merge = require('lodash/merge');
 
@@ -176,11 +177,7 @@ describe('spectral', () => {
           },
         });
 
-        const target: IParsedResult = {
-          parsed: parseWithPointers(`{"foo":"bar"}`),
-          getLocationForJsonPath,
-          source: 'foo',
-        };
+        const target = new Document(`{"foo":"bar"}`, Parsers.Json, 'foo');
 
         return expect(s.run(target)).resolves.toStrictEqual([
           {
@@ -207,39 +204,37 @@ describe('spectral', () => {
         const s = new Spectral();
         const source = 'foo.yaml';
 
-        const parsedResult: IParsedResult = {
-          getLocationForJsonPath,
-          source,
-          parsed: parseWithPointers(
-            JSON.stringify(
-              {
-                paths: {
-                  '/agreements': {
-                    get: {
-                      description: 'Get some Agreements',
-                      responses: {
-                        '200': {
-                          $ref: '#/responses/GetAgreementsOk',
-                        },
-                        default: {},
+        const parsedResult = new Document(
+          JSON.stringify(
+            {
+              paths: {
+                '/agreements': {
+                  get: {
+                    description: 'Get some Agreements',
+                    responses: {
+                      '200': {
+                        $ref: '#/responses/GetAgreementsOk',
                       },
-                      summary: 'List agreements',
-                      tags: ['agreements', 'pagination'],
+                      default: {},
                     },
-                  },
-                },
-                responses: {
-                  GetAgreementsOk: {
-                    description: 'Successful operation',
-                    headers: {},
+                    summary: 'List agreements',
+                    tags: ['agreements', 'pagination'],
                   },
                 },
               },
-              null,
-              2,
-            ),
+              responses: {
+                GetAgreementsOk: {
+                  description: 'Successful operation',
+                  headers: {},
+                },
+              },
+            },
+            null,
+            2,
           ),
-        };
+          Parsers.Json,
+          source,
+        );
 
         s.setRules({
           'pagination-responses-have-x-next-token': {

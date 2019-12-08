@@ -51,12 +51,16 @@ export class Spectral {
 
   public async runWithResolved(target: IDocument | object | string, opts: IRunOpts = {}): Promise<ISpectralFullResult> {
     const document: IDocument = isDocument(target)
-      ? target // todo: set opts.resolveOpts.documentUri on existing document?
+      ? target
       : new Document(
           typeof target === 'string' ? target : safeStringify(target, undefined, 2),
           Parsers.Yaml,
           opts.resolve?.documentUri,
         );
+
+    if (opts.resolve?.documentUri && document.source === void 0) {
+      (document as Omit<IDocument, 'source'> & { source: IDocument['source'] }).source = opts.resolve.documentUri;
+    }
 
     const resolved = new Resolved(document, this._resolver);
     await resolved.resolve();
