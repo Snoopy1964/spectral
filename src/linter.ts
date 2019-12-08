@@ -97,7 +97,7 @@ export const lintNode = (
         );
 
         const path = parsed?.path || escapedJsonPath;
-        const range = parsed?.doc.getLocationForJsonPath(parsed.doc.parsed, path, true)?.range || {
+        const range = parsed?.doc.getRangeForJsonPath(path, true) || {
           start: {
             line: 0,
             character: 0,

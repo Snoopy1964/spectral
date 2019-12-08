@@ -43,21 +43,20 @@ export function formatParserDiagnostics(diagnostics: IDiagnostic[], source?: str
 }
 
 export const formatResolverErrors = (document: IDocument, diagnostics: IResolveError[]): IRuleResult[] => {
-  return uniqBy(diagnostics, 'message').reduce<IRuleResult[]>((errors, error) => {
+  return uniqBy(diagnostics, 'message').map<IRuleResult>(error => {
     const path = [...(error.path || []), '$ref'];
-    const location = document.getLocationForJsonPath(document.parsed, path, true);
+    const range = document.getRangeForJsonPath(path, true);
 
-    if (location) {
-      errors.push({
-        code: 'invalid-ref',
-        path,
-        message: prettyPrintResolverErrorMessage(error.message),
-        severity: DiagnosticSeverity.Error,
-        range: location.range,
-        source: document.source,
-      });
-    }
-
-    return errors;
-  }, []);
+    return {
+      code: 'invalid-ref',
+      path,
+      message: prettyPrintResolverErrorMessage(error.message),
+      severity: DiagnosticSeverity.Error,
+      range: range || {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 0 },
+      },
+      source: document.source,
+    };
+  });
 };

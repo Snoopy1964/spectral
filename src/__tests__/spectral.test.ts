@@ -2,7 +2,7 @@ import { getLocationForJsonPath, parseWithPointers } from '@stoplight/json';
 import { IGraphNodeData } from '@stoplight/json-ref-resolver/types';
 import { DiagnosticSeverity, Dictionary } from '@stoplight/types';
 import { DepGraph } from 'dependency-graph';
-import { isDocument } from '../document';
+import { IDocument, isDocument } from '../document';
 import { Spectral } from '../spectral';
 import { IParsedResult, IResolver, IRunRule, RuleFunction } from '../types';
 
@@ -265,7 +265,7 @@ describe('spectral', () => {
     });
   });
 
-  test('isDocument correctly identifies objects that fulfill the IParsedResult interface', () => {
+  test('isDocument correctly identifies objects that fulfill the IDocument interface', () => {
     // @ts-ignore
     expect(isDocument()).toBe(false);
 
@@ -292,13 +292,17 @@ describe('spectral', () => {
       }),
     ).toBe(false);
 
-    const obj: IParsedResult = {
-      getLocationForJsonPath: jest.fn(),
-      parsed: {
+    const obj: IDocument = {
+      getRangeForJsonPath: jest.fn(),
+      parserResult: {
         data: {},
         ast: {},
         lineMap: [],
         diagnostics: [],
+      },
+      diagnostics: [],
+      get data() {
+        return this.parserResult.data;
       },
     };
     expect(isDocument(obj)).toBe(true);
