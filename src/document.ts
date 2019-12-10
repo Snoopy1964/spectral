@@ -1,11 +1,10 @@
 import { normalize } from '@stoplight/path';
-import { IParserResult, IRange, JsonPath, Optional } from '@stoplight/types';
-import { IDiagnostic } from '@stoplight/types/dist';
+import { IDiagnostic, IParserResult, IRange, JsonPath, Optional } from '@stoplight/types';
 import { isObject } from 'lodash';
 import { formatParserDiagnostics } from './error-messages';
 import { IParser } from './parsers/types';
 import { IRuleResult } from './types';
-import { isObjectLiteral } from './utils/isObjectLiteral';
+import { isObjectLiteral } from './utils';
 
 export const isDocument = (obj: unknown): obj is IDocument => {
   if (obj instanceof Document) return true;
