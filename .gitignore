@@ -37,3 +37,7 @@
 *.log*
 *-debug.log*
 *-error.log*
+
+# private tests
+# /testIt
+

@@ -1,0 +1,45 @@
+# extends: "spectral:oas"
+
+functionsDir: "./sap-functions"
+functions: [
+  sap-pathname
+]
+
+rules:
+  sap-pathname:
+    description: Path names has to follow the CP Kernel Service API harmonization guideline"
+    message: ": {{error}}, \n    property: {{property}}, \n    value: {{value}} "
+    given: "$.paths[*]~"
+    severity: error
+    then:
+      function: "sap-pathname"
+  sap-falsy:
+    description: Just a check for internal function extensions
+    # message: ": {{error}}, \n    property: {{property}}, \n    value: {{value}} "
+    given: $.tags[*]
+    # given: "$.paths[*]~"
+    severity: error
+    then:
+      field: description
+      function: falsycopy
+
+
+  # my-test-rule-name:
+  #   description: Tags must have a description.
+  #   given: $.tags[*]
+  #   severity: error
+  #   recommended: true
+  #   then:
+  #     field: description
+  #     function: falsycopy
+
+  # my-camel-case-name:
+  #   description: Name should camelCased.
+  #   type: style
+  #   given: "$.paths[*]~"
+  #   severity: error
+  #   recommended: true
+  #   then:
+  #     function: casing
+  #     functionOptions:
+  #       type: macro

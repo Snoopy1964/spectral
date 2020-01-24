@@ -5,6 +5,7 @@ export const functions = {
   length: require('./length').length,
   pattern: require('./pattern').pattern,
   falsy: require('./falsy').falsy,
+  falsycopy: require('./falsycopy').falsycopy,
   schema: require('./schema').schema,
   schemaPath: require('./schema-path').schemaPath,
   truthy: require('./truthy').truthy,
